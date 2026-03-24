@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from "../services/api";
 import { Dumbbell, UtensilsCrossed, TrendingUp, Calendar, User } from 'lucide-react';
 import { getWorkout, getMealPlan, getUserStats } from '../services/api';
 
@@ -38,8 +39,9 @@ const Dashboard = () => {
   };
 
   const searchUsers = async () => {
+    console.log("SEARCH CLICKED", search);
 
-  if (!search.trim()) return;
+    if (!search.trim()) return;
 
   try {
 
@@ -117,8 +119,7 @@ const Dashboard = () => {
           {results.map(user => (
             <div
               key={user.id}
-              onClick={() => navigate(`/profile/${user.id}`)}
-              className="bg-white p-4 rounded shadow mb-2"
+              className="bg-white p-4 rounded shadow mb-2 hover:shadow-lg transition"
             >
               <h3 className="font-bold">{user.username}</h3>
 
@@ -127,12 +128,20 @@ const Dashboard = () => {
               <p>🔥 {user.streak} day streak</p>
 
               <p>🏆 {user.points} points</p>
+
+            
+            <button
+              onClick={() => navigate(`/profile/${user.id}`)}
+              className="mt-2 bg-gray-800 text-white px-3 py-1 rounded"
+            >
+              View Profile
+              </button>
             </div>
           ))}
-
         </div>
       )}
 
+        
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
 

@@ -40,20 +40,23 @@ const Profile = () => {
     } catch (err) {
       console.error(err);
     }
+
   };
 
   const loadOwnProfile = async () => {
     try {
-      const userRes = await getCurrentUser();
-      setUser(userRes);
-
+      
       const profileRes = await getUserProfile();
-      setProfile(profileRes);
+      setProfile(profileRes.data);
+
+      const userData = await getCurrentUser();
+      setUser(userData);
 
       setLoading(false);
 
     } catch (err) {
       console.error(err);
+      setLoading(false);
     }
   };
 
@@ -102,8 +105,12 @@ const Profile = () => {
         {/* USER INFO */}
         <div className="bg-white p-6 rounded shadow mb-6">
           <h1 className="text-2xl font-bold">{user?.username}</h1>
-          <p>🔥 Streak: {user?.streak}</p>
-          <p>🏆 Points: {user?.points}</p>
+          <p className="text-gray-600">Public Profile</p>
+
+          <div className="mt-3 flex gap-4">
+            <span>🔥 {user?.streak} day streak</span>
+            <span>🏆 {user?.points} points</span>
+          </div>
         </div>
 
         {/* POSTS */}

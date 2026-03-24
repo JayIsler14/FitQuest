@@ -13,6 +13,19 @@ const api = axios.create({
   withCredentials: true
 });
 
+// Request interceptor to attach JWT token
+api.interceptors.request.use((config) => {
+
+  const token = localStorage.getItem("jwt_token");
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+
+});
+
 // DEBUG LOGGER
 api.interceptors.request.use((req) => {
   console.log("API REQUEST:", req.method?.toUpperCase(), req.url, req.data);
@@ -30,28 +43,8 @@ api.interceptors.response.use(
   }
 
 );
-api.interceptors.response.use(
-  (res) => {
-    console.log("API SUCCESS:", res.config.url, res.data);
-    return res;
-  },
-  (err) => {
-    console.error("API ERROR:", err.response?.data || err.message);
-    return Promise.reject(err);
-  }
-);
-// Request interceptor to attach JWT token
-api.interceptors.request.use((config) => {
 
-  const token = localStorage.getItem("jwt_token");
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  return config;
-
-});
 
 // Response interceptor for error handling
 api.interceptors.response.use(

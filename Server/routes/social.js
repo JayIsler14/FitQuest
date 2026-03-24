@@ -10,14 +10,14 @@ const {
 
 const { searchUsers } = require('../controllers/socialController');
 
-router.get('/search', authenticate, searchUsers);
+router.get('/search', searchUsers);
 
-router.get('/user/:id', authenticate, getUserPosts);
+router.get('/user/:id', getUserPosts);
 
 router.post('/', authenticate, createPost);
 router.get('/', authenticate, getPosts);
 router.post('/like/:id', authenticate, likePost);
 
-router.get('/progress/:id', authenticate, getUserProgress);
+router.get('/progress/:id', getUserProgress);
 
 module.exports = router;
