@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import api, { getWorkout, submitWorkoutRating } from '../services/api';
 
 const Workout = () => {
+
   const navigate = useNavigate();
 
   const [workout, setWorkout] = useState(null);
@@ -16,6 +17,7 @@ const Workout = () => {
 
   useEffect(() => {
     loadWorkout();
+    loadCompletedExercises();
   }, []);
 
   const loadWorkout = async () => {
@@ -63,7 +65,6 @@ const Workout = () => {
         day: currentDay
       });
 
-      // regenerate plan based on difficulty feedback
       await loadWorkout();
 
       toast.success("Next workout unlocked 🔓");
@@ -93,7 +94,13 @@ const Workout = () => {
 
   const totalExercises = today?.exercises?.length || 0;
 
+  const progressPercent =
+    totalExercises > 0
+      ? (completedExercises.length / totalExercises) * 100
+      : 0;
+
   return (
+
     <div className="p-6 max-w-5xl mx-auto">
 
       <BackToDashboard />
@@ -148,6 +155,7 @@ const Workout = () => {
       </div>
 
       {showRating && (
+
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
 
           <div className="bg-white rounded-xl p-6 shadow-xl w-96 text-center">
@@ -163,6 +171,7 @@ const Workout = () => {
             <div className="flex justify-center gap-3 mb-4">
 
               {[1, 2, 3, 4, 5].map((num) => (
+
                 <button
                   key={num}
                   onClick={() => submitRating(num)}
@@ -170,6 +179,7 @@ const Workout = () => {
                 >
                   {num}
                 </button>
+
               ))}
 
             </div>

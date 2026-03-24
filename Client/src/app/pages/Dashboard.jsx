@@ -18,10 +18,12 @@ const Dashboard = () => {
 
   const loadDashboard = async () => {
     try {
-      const [workoutRes, mealRes, statsRes] = await Promise.all([
+
+      const [workoutRes, mealRes, statsRes, historyRes] = await Promise.all([
         getWorkout(),
         getMealPlan(),
         getUserStats(),
+        getWorkoutHistory()
       ]);
 
       setPlan({
@@ -30,6 +32,8 @@ const Dashboard = () => {
       });
 
       setStats(statsRes.data);
+
+      setCompletedExercises(historyRes.data.logs || []);
 
     } catch (error) {
       console.error('Failed to load dashboard:', error);
@@ -55,6 +59,21 @@ const Dashboard = () => {
     console.error("Search error:", err);
   }
 
+  const loadWeeklyActivity = async () => {
+    try {
+
+      const res = await getWeeklyActivity();
+
+      const formatted = res.data.map(d => ({
+        day: new Date(d.day).toLocaleDateString('en-US', { weekday: 'short' }),
+        workouts: Number(d.workouts)
+      }));
+
+      setWeeklyActivity(formatted);
+
+    } catch (error) {
+      console.error('Failed to load activity:', error);
+    }
   };
 
   if (loading) {
@@ -74,6 +93,24 @@ const Dashboard = () => {
 
   // 🔹 Show only first 3 exercises
   const nextExercises = allExercises.slice(0, 3);
+  const todayExercises =
+    plan?.workout?.exercises?.find(
+      d => d.day === plan?.workout?.unlockedDay
+    )?.exercises || [];
+
+  const completedToday = completedExercises.filter(log => {
+    const logDate = new Date(log.completed_at).toDateString();
+    const today = new Date().toDateString();
+
+    return logDate === today && log.exercise_id !== null;
+  }).length;
+
+  const totalToday = todayExercises.length;
+
+  const nextExercises = todayExercises.slice(0, 3);
+
+  const progressPercent =
+    totalToday > 0 ? (completedToday / totalToday) * 100 : 0;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -168,7 +205,9 @@ const Dashboard = () => {
             <h3 className="font-semibold">Weekly Goal</h3>
             <TrendingUp size={24} />
           </div>
-          <p className="text-4xl font-bold">3/4</p>
+          <p className="text-4xl font-bold">
+            {stats.weeklyCompleted}/{stats.weeklyGoal}
+          </p>
           <p className="text-green-100">workouts completed</p>
         </div>
 
@@ -180,16 +219,29 @@ const Dashboard = () => {
         <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-6">
 
           <div className="flex items-center gap-3 mb-4">
+
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
               <Dumbbell className="text-blue-600" size={24} />
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-gray-800">Today's Workout</h2>
+              <h2 className="text-xl font-bold text-gray-800">
+                Today's Workout
+              </h2>
+
               <p className="text-sm text-gray-600">
-                {allExercises.length} exercises planned
+                {completedToday} / {totalToday} exercises completed
               </p>
             </div>
+
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full bg-gray-200 rounded-full h-2 mb-5">
+            <div
+              className="bg-blue-600 h-2 rounded-full"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
 
           <div className="space-y-3 mb-4">
@@ -234,6 +286,7 @@ const Dashboard = () => {
         <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-6">
 
           <div className="flex items-center gap-3 mb-4">
+
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <UtensilsCrossed className="text-green-600" size={24} />
             </div>
@@ -279,6 +332,7 @@ const Dashboard = () => {
               ))}
 
             </div>
+
           )}
 
           <button

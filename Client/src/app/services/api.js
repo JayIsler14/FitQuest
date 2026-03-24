@@ -43,8 +43,28 @@ api.interceptors.response.use(
   }
 
 );
+api.interceptors.response.use(
+  (res) => {
+    console.log("API SUCCESS:", res.config.url, res.data);
+    return res;
+  },
+  (err) => {
+    console.error("API ERROR:", err.response?.data || err.message);
+    return Promise.reject(err);
+  }
+);
+// Request interceptor to attach JWT token
+api.interceptors.request.use((config) => {
 
+  const token = localStorage.getItem("jwt_token");
 
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+
+});
 
 // Response interceptor for error handling
 api.interceptors.response.use(
@@ -289,6 +309,9 @@ export const completeWorkout = async (workoutData) => {
 // - user_streaks
 export const getWorkoutHistory = async () => {
   return api.get('/workouts/history');
+};
+export const getWeeklyActivity = () => {
+  return api.get('/workouts/weekly-activity');
 };
 export const submitWorkoutRating = ({ rating, day }) =>
   api.post('/workouts/workout-rating', { rating, day });

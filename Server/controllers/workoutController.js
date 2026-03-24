@@ -154,6 +154,7 @@ exports.getWorkoutHistory = async (req, res) => {
 };
 
 
+
 /*
 SUBMIT WORKOUT DIFFICULTY RATING
 This is the key AI feedback loop
@@ -174,7 +175,9 @@ exports.submitWorkoutRating = async (req, res) => {
 
     await db.query(
       `INSERT INTO workout_logs (user_id, rating, day)
-       VALUES ($1,$2,$3)`,
+      VALUES ($1,$2,$3)
+      ON CONFLICT (user_id, day)
+      DO UPDATE SET rating = EXCLUDED.rating`,
       [userId, rating, day]
     );
 
@@ -202,19 +205,130 @@ exports.submitWorkoutRating = async (req, res) => {
 
 };
 
-exports.getStats = async (req, res) => {
+exports.getWeeklyActivity = async (req, res) => {
 
   try {
 
+    const userId = req.user.id;
+
     const result = await db.query(
-      `SELECT streak
-       FROM user_streaks
-       WHERE user_id=$1`,
-      [req.user.id]
+      `
+      SELECT (completed_at AT TIME ZONE 'America/New_York')::date AS day,
+          COUNT(*) AS workouts
+      FROM workout_logs
+      WHERE user_id = $1
+      AND rating IS NOT NULL
+      AND completed_at >= NOW() - INTERVAL '7 days'
+      GROUP BY (completed_at AT TIME ZONE 'America/New_York')::date
+      ORDER BY day
+  `,
+      [userId]
+    );
+    const logs = result.rows;
+
+    const days = [];
+    const today = new Date();
+
+    for (let i = 6; i >= 0; i--) {
+
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+
+      const dateString = d.toLocaleDateString('en-CA');
+
+      const found = logs.find(
+        l => new Date(l.day).toLocaleDateString('en-CA') === dateString
+      );
+
+      days.push({
+        day: dateString,
+        workouts: found ? Number(found.workouts) : 0
+      });
+
+    }
+
+    res.json(days);
+
+  } catch (err) {
+
+    console.error("Weekly activity error:", err);
+
+    res.status(500).json({
+      error: "Failed to fetch weekly activity"
+    });
+
+  }
+
+};
+/*
+GET USER DASHBOARD STATS
+(streak, total points, weekly goal progress)
+*/
+exports.getUserStats = async (req, res) => {
+
+  try {
+
+    const userId = req.user.id;
+
+    // TOTAL POINTS
+    const pointsResult = await db.query(
+      `
+      SELECT COALESCE(SUM(points_earned),0) AS points
+      FROM workout_logs
+      WHERE user_id = $1
+      `,
+      [userId]
     );
 
+    // WEEKLY COMPLETED WORKOUTS
+    const weeklyResult = await db.query(
+      `
+      SELECT COUNT(*) AS completed
+      FROM workout_logs
+      WHERE user_id = $1
+      AND completed_at >= DATE_TRUNC('week', NOW())
+      `,
+      [userId]
+    );
+
+    // CURRENT STREAK
+    const streakDays = await db.query(
+      `
+      SELECT DISTINCT (completed_at AT TIME ZONE 'America/New_York')::date AS day
+      FROM workout_logs
+      WHERE user_id = $1
+      AND exercise_id IS NOT NULL
+      ORDER BY day DESC
+      `,
+      [userId]
+    );
+
+    const dates = streakDays.rows.map(d => new Date(d.day));
+
+    let streak = 0;
+    let prev = null;
+
+    for (const date of dates) {
+
+      if (!prev) {
+        streak = 1;
+      } else {
+
+        const diff = (prev - date) / (1000 * 60 * 60 * 24);
+
+        if (diff === 1) streak += 1;
+        else break;
+
+      }
+
+      prev = date;
+    }
+
     res.json({
-      streak: result.rows[0]?.streak || 0
+      streak,
+      points: Number(pointsResult.rows[0].points),
+      weeklyCompleted: Number(weeklyResult.rows[0].completed),
+      weeklyGoal: 4
     });
 
   } catch (err) {
