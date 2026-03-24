@@ -22,95 +22,42 @@ const Workout = () => {
 
   const loadWorkout = async () => {
     try {
-
       const response = await getWorkout();
-
       setWorkout(response.data);
-
     } catch (error) {
-
       console.error('Failed to load workout:', error);
-
       toast.error('Failed to load workout plan');
-
     } finally {
-
       setLoading(false);
-
     }
   };
 
-  const loadCompletedExercises = async () => {
+  const handleComplete = (exerciseId) => {
+    const updatedCompleted = [...completedExercises, exerciseId];
+    setCompletedExercises(updatedCompleted);
 
-    try {
+    if (!workout?.exercises) return;
 
-      const res = await api.get("/workouts/completed-today");
+    const day = workout.exercises.find(d =>
+      d.exercises.some(ex => ex.id === exerciseId)
+    );
 
-      const ids = res.data.map(e => e.exercise_id);
+    if (!day) return;
 
-      setCompletedExercises(ids);
+    const completedToday = day.exercises.filter(ex =>
+      updatedCompleted.includes(ex.id)
+    ).length;
 
-    } catch (err) {
-
-      console.error("Failed to load completed exercises", err);
-
+    if (completedToday === day.exercises.length) {
+      setCurrentDay(day.day);
+      setShowRating(true);
+      toast.success(`Day ${day.day} completed!`);
+    } else {
+      toast.success('Exercise completed!');
     }
-
-  };
-
-  const handleComplete = async (exerciseId) => {
-
-    if (completedExercises.includes(exerciseId)) return;
-
-    try {
-
-      await api.post("/workouts/log", {
-        exercise_id: exerciseId,
-        duration_minutes: 10
-      });
-
-      const updatedCompleted = [...completedExercises, exerciseId];
-
-      setCompletedExercises(updatedCompleted);
-
-      if (!workout?.exercises) return;
-
-      const day = workout.exercises.find(d =>
-        d.exercises.some(ex => ex.id === exerciseId)
-      );
-
-      if (!day) return;
-
-      const completedToday = day.exercises.filter(ex =>
-        updatedCompleted.includes(ex.id)
-      ).length;
-
-      if (completedToday === day.exercises.length) {
-
-        setCurrentDay(day.day);
-
-        setShowRating(true);
-
-        toast.success(`Day ${day.day} completed!`);
-
-      } else {
-
-        toast.success('Exercise completed!');
-
-      }
-
-    } catch (err) {
-
-      console.error(err);
-
-      toast.error("Failed to log workout");
-
-    }
-
   };
 
   const submitRating = async (rating) => {
-
     try {
 
       await submitWorkoutRating({
@@ -125,31 +72,20 @@ const Workout = () => {
       navigate("/dashboard");
 
     } catch (err) {
-
       console.error(err);
-
       toast.error("Failed to submit rating");
-
     }
-
   };
 
   if (loading) {
-
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
-
           <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-
-          <p className="text-gray-600">
-            Loading your workout...
-          </p>
-
+          <p className="text-gray-600">Loading your workout...</p>
         </div>
       </div>
     );
-
   }
 
   const unlockedDay = workout?.unlockedDay;
@@ -170,19 +106,15 @@ const Workout = () => {
       <BackToDashboard />
 
       <div className="mb-8">
-
         <h1 className="text-3xl font-bold text-gray-800 mb-2">
           Today's Workout
         </h1>
-
         <p className="text-gray-600">
           {totalExercises} exercises • AI-personalized for you
         </p>
-
       </div>
 
       {today && (
-
         <div className="mb-10">
 
           <h2 className="text-xl font-bold text-gray-700 mb-4">
@@ -190,45 +122,34 @@ const Workout = () => {
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
             {today.exercises.map((exercise) => (
-
               <WorkoutCard
                 key={exercise.id}
                 exercise={exercise}
-                completed={completedExercises.includes(exercise.id)}
                 onComplete={handleComplete}
               />
-
             ))}
-
           </div>
 
         </div>
-
       )}
 
       <div className="mt-8 bg-white rounded-xl shadow-md p-6">
 
         <div className="flex justify-between mb-2">
-
-          <span className="font-semibold text-gray-800">
-            Progress
-          </span>
-
+          <span className="font-semibold text-gray-800">Progress</span>
           <span className="text-gray-600">
             {completedExercises.length} / {totalExercises} completed
           </span>
-
         </div>
 
         <div className="w-full bg-gray-200 rounded-full h-3">
-
           <div
             className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
+            style={{
+              width: `${(completedExercises.length / totalExercises) * 100}%`,
+            }}
           />
-
         </div>
 
       </div>
@@ -270,13 +191,10 @@ const Workout = () => {
           </div>
 
         </div>
-
       )}
 
     </div>
-
   );
-
 };
 
 export default Workout;

@@ -13,6 +13,19 @@ const api = axios.create({
   withCredentials: true
 });
 
+// Request interceptor to attach JWT token
+api.interceptors.request.use((config) => {
+
+  const token = localStorage.getItem("jwt_token");
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+
+});
+
 // DEBUG LOGGER
 api.interceptors.request.use((req) => {
   console.log("API REQUEST:", req.method?.toUpperCase(), req.url, req.data);
@@ -379,39 +392,17 @@ export const getPublicUsers = async () => {
 // ============================================
 // STATS ENDPOINTS
 // ============================================
-export const getCompletedExercisesToday = async () => {
 
-  const res = await api.get("/workouts/completed-today");
-
-  return res.data;
-
-};
 export const getUserStats = async () => {
 
-  const res = await api.get("/workouts/history");
+  const res = await api.get("/workouts/stats");
 
-  const logs = res.data.logs || [];
+  return res;
 
-  const points = logs.length * 10; // simple points system
+};
 
-  const today = new Date();
-  const startOfWeek = new Date();
-  startOfWeek.setDate(today.getDate() - today.getDay());
-
-  const weeklyCompleted = logs.filter(log => {
-    const date = new Date(log.completed_at);
-    return date >= startOfWeek;
-  }).length;
-
-  return {
-    data: {
-      streak: res.data.streaks?.current || 0,
-      points,
-      weeklyCompleted,
-      weeklyGoal: 4
-    }
-  };
-
+export const getUserProgress = async (userId) => {
+  return api.get(`/social/progress/${userId}`);
 };
 
 export default api;

@@ -68,6 +68,8 @@ function App() {
         <Route path="/reset-password/:token" element={<NewPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
+        <Route path="/profile/:id" element={<Profile />} />
+
         {/* Onboarding (protected) */}
         <Route
           path="/onboarding"

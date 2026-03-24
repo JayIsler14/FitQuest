@@ -1,43 +1,66 @@
 import React, { useState, useEffect } from 'react';
 import { User, Save, Edit3, LogOut, Settings } from 'lucide-react';
 import BackToDashboard from '../components/BackToDashboard';
+import { useParams } from "react-router-dom";
+import api from "../services/api";
 import { getUserProfile, updateUserProfile } from '../services/api';
 import { toast } from 'sonner';
+
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, logout } from "../services/api";
 
 const Profile = () => {
-  const navigate = useNavigate();
-  const [profile, setProfile] = useState({
-    age: '',
-    height: '',
-    weight: '',
-    goal: 'maintain',
-    level: 3,
-    intensity: 3,
-    weeklyAvailability: '3-4',
-    isPublic: false,
-  });
-  const [loading, setLoading] = useState(true);
+
+  const { id } = useParams();
+  const isOwnProfile = !id;
   const [saving, setSaving] = useState(false);
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
-    loadProfile();
-    loadUser();
-  }, []);
 
-  const loadProfile = async () => {
+    if (id) {
+      loadPublicProfile();   // viewing another user
+    } else {
+      loadOwnProfile();      // your own profile
+    }
+
+  }, [id]);
+
+  const loadPublicProfile = async () => {
     try {
-      const response = await getUserProfile();
-      if (response.data && Object.keys(response.data).length > 0) {
-        setProfile(response.data);
-      }
-    } catch (error) {
-      console.error('Failed to load profile:', error);
-    } finally {
+      const progressRes = await api.get(`/social/progress/${id}`);
+      const postsRes = await api.get(`/social/user/${id}`);
+
+      setUser(progressRes.data);
+      setPosts(postsRes.data);
+
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+    }
+
+  };
+
+  const loadOwnProfile = async () => {
+    try {
+      
+      const profileRes = await getUserProfile();
+      setProfile(profileRes.data);
+
+      const userData = await getCurrentUser();
+      setUser(userData);
+
+      setLoading(false);
+
+    } catch (err) {
+      console.error(err);
       setLoading(false);
     }
   };
+
+  
   const loadUser = async () => {
     try {
       const data = await getCurrentUser();
@@ -73,6 +96,44 @@ const Profile = () => {
     );
   }
 
+  if (!isOwnProfile) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+
+        <BackToDashboard />
+
+        {/* USER INFO */}
+        <div className="bg-white p-6 rounded shadow mb-6">
+          <h1 className="text-2xl font-bold">{user?.username}</h1>
+          <p className="text-gray-600">Public Profile</p>
+
+          <div className="mt-3 flex gap-4">
+            <span>🔥 {user?.streak} day streak</span>
+            <span>🏆 {user?.points} points</span>
+          </div>
+        </div>
+
+        {/* POSTS */}
+        <div className="bg-white p-6 rounded shadow">
+          <h2 className="text-xl font-bold mb-4">Posts</h2>
+
+          {posts.length === 0 ? (
+            <p>No posts yet</p>
+          ) : (
+            posts.map(post => (
+              <div key={post.id} className="border-b py-2">
+                <p>{post.content}</p>
+                <p>❤️ {post.likes} likes</p>
+              </div>
+            ))
+          )}
+
+        </div>
+
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <BackToDashboard />
@@ -89,7 +150,7 @@ const Profile = () => {
             <User size={40} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-gray-800">User Profile</h2>
+            <h1 className="text-2xl font-bold">{user.username}</h1>
             <p className="text-gray-600">{user?.email}</p>
           </div>
         </div>
@@ -270,23 +331,14 @@ const Profile = () => {
       {/* Logout Button */}
       <button
         onClick={async () => {
-          try {
-            await logout();
-          } catch (err) {
-            console.error("Logout failed");
-          }
-
-          const handleLogout = async () => {
-            await logout();
-            toast.success("Logged out successfully");
-            navigate("/login");
-          };
-          onClick = { handleLogout }
+          await logout();
+          toast.success("Logged out successfully");
+          navigate("/login");
         }}
-        className="mt-4 w-full flex items-center justify-center gap-2 bg-red-500 text-white py-3 rounded-lg font-semibold hover:bg-red-600 transition-colors"
+        className="mt-4 w-full flex items-center justify-center gap-2 bg-red-500 text-white py-3 rounded-lg"
       >
         <LogOut size={20} />
-        Logout
+          Logout
       </button>
     </div>
   );

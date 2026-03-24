@@ -8,6 +8,7 @@ const Social = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [likedUsers, setLikedUsers] = useState(new Set());
+  const [postText,setPostText] = useState("");
 
   useEffect(() => {
     loadPublicUsers();
@@ -26,11 +27,11 @@ const Social = () => {
     }
   };
 
-  const handleLike = async (userId) => {
+  const handleLike = async (postId) => {
     try {
       // TODO: POST /post_likes
-      await likePost(userId);
-      setLikedUsers(new Set([...likedUsers, userId]));
+      await likePost(postId);
+      setLikedUsers(new Set([...likedUsers, postId]));
     } catch (error) {
       console.error('Failed to like:', error);
     }
@@ -41,6 +42,18 @@ const Social = () => {
       user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.goal.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleCreatePost = async () => {
+
+  if(!postText.trim()) return;
+
+  await createPost({content:postText});
+
+  setPostText("");
+
+  loadPublicUsers();
+
+};
 
   if (loading) {
     return (
@@ -74,6 +87,24 @@ const Social = () => {
             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+
+      <textarea
+      value={postText}
+      onChange={(e)=>setPostText(e.target.value)}
+      placeholder="Share your workout progress..."
+      className="w-full border rounded-lg p-3"
+      />
+
+      <button
+      onClick={handleCreatePost}
+      className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg"
+      >
+      Post
+      </button>
+
       </div>
 
       {/* Users Grid */}

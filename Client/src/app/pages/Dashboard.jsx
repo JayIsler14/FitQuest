@@ -1,36 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from "../services/api";
 import { Dumbbell, UtensilsCrossed, TrendingUp, Calendar, User } from 'lucide-react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer
-} from 'recharts';
-
-import {
-  getWorkout,
-  getMealPlan,
-  getUserStats,
-  getWeeklyActivity,
-  getWorkoutHistory
-} from '../services/api';
+import { getWorkout, getMealPlan, getUserStats } from '../services/api';
 
 const Dashboard = () => {
-
   const navigate = useNavigate();
-
   const [plan, setPlan] = useState(null);
   const [stats, setStats] = useState({ streak: 0, points: 0 });
-  const [weeklyActivity, setWeeklyActivity] = useState([]);
-  const [completedExercises, setCompletedExercises] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search,setSearch] = useState("");
+  const [results,setResults] = useState([]);
 
   useEffect(() => {
     loadDashboard();
-    loadWeeklyActivity();
   }, []);
 
   const loadDashboard = async () => {
@@ -58,6 +41,23 @@ const Dashboard = () => {
       setLoading(false);
     }
   };
+
+  const searchUsers = async () => {
+    console.log("SEARCH CLICKED", search);
+
+    if (!search.trim()) return;
+
+  try {
+
+    const res = await api.get(`/social/search?q=${search}`);
+
+    console.log("Search results:", res.data); 
+
+    setResults(res.data);
+
+  } catch (err) {
+    console.error("Search error:", err);
+  }
 
   const loadWeeklyActivity = async () => {
     try {
@@ -87,6 +87,12 @@ const Dashboard = () => {
     );
   }
 
+  // 🔹 Flatten exercises across all days
+  const allExercises =
+    plan?.workout?.exercises?.flatMap(day => day.exercises) || [];
+
+  // 🔹 Show only first 3 exercises
+  const nextExercises = allExercises.slice(0, 3);
   const todayExercises =
     plan?.workout?.exercises?.find(
       d => d.day === plan?.workout?.unlockedDay
@@ -111,14 +117,9 @@ const Dashboard = () => {
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">
-            Welcome Back!
-          </h1>
-          <p className="text-gray-600">
-            Here's your personalized fitness plan for today
-          </p>
+          <h1 className="text-3xl font-bold text-gray-800">Welcome Back!</h1>
+          <p className="text-gray-600">Here's your personalized fitness plan for today</p>
         </div>
 
         <button
@@ -128,9 +129,56 @@ const Dashboard = () => {
           <User size={18} />
           <span className="font-medium">Account</span>
         </button>
+      </div>
+
+      <div className="bg-white p-4 rounded-lg shadow mb-6">
+
+        <input
+          type="text"
+          value={search}
+          onChange={(e)=>setSearch(e.target.value)}
+          placeholder="Search users..."
+          className="border p-2 rounded w-full"
+        />
+
+        <button
+          onClick={searchUsers}
+          className="mt-2 bg-blue-600 text-white px-4 py-2 rounded"
+        >
+        Search
+        </button>
 
       </div>
 
+      {results.length > 0 && (
+        <div className="mb-6">
+
+          {results.map(user => (
+            <div
+              key={user.id}
+              className="bg-white p-4 rounded shadow mb-2 hover:shadow-lg transition"
+            >
+              <h3 className="font-bold">{user.username}</h3>
+
+              <p>{user.goal}</p>
+
+              <p>🔥 {user.streak} day streak</p>
+
+              <p>🏆 {user.points} points</p>
+
+            
+            <button
+              onClick={() => navigate(`/profile/${user.id}`)}
+              className="mt-2 bg-gray-800 text-white px-3 py-1 rounded"
+            >
+              View Profile
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+        
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
 
@@ -244,18 +292,12 @@ const Dashboard = () => {
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-gray-800">
-                Today's Meal Plan
-              </h2>
-              <p className="text-sm text-gray-600">
-                Personalized nutrition
-              </p>
+              <h2 className="text-xl font-bold text-gray-800">Today's Meal Plan</h2>
+              <p className="text-sm text-gray-600">Personalized nutrition</p>
             </div>
-
           </div>
 
           {plan?.meals && (
-
             <div className="space-y-3 mb-4">
 
               {Object.entries(plan.meals).map(([mealType, meal]) => (
@@ -279,6 +321,7 @@ const Dashboard = () => {
                     <p className="font-semibold text-gray-800">
                       {meal.calories}
                     </p>
+
                     <p className="text-xs text-gray-600">
                       cal
                     </p>
@@ -310,35 +353,8 @@ const Dashboard = () => {
           Weekly Activity
         </h2>
 
-        <div className="h-64">
-
-          {weeklyActivity.length === 0 ? (
-
-            <div className="h-full flex flex-col items-center justify-center text-gray-500">
-
-              <p className="text-lg font-semibold mb-2">
-                No workouts logged yet
-              </p>
-
-              <p className="text-sm">
-                Complete your first workout to start tracking your progress!
-              </p>
-
-            </div>
-
-          ) : (
-
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyActivity}>
-                <XAxis dataKey="day" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="workouts" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-
-          )}
-
+        <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center text-gray-600">
+          <p>Activity chart will be displayed here</p>
         </div>
 
       </div>

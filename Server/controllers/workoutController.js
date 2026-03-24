@@ -6,45 +6,90 @@ LOG EXERCISE COMPLETION
 exports.logWorkout = async (req, res) => {
 
   const { exercise_id, duration_minutes } = req.body;
+  const userId = req.user.id;
 
   await db.query(
     `INSERT INTO workout_logs
      (user_id, exercise_id, duration_minutes)
      VALUES ($1,$2,$3)`,
-    [req.user.id, exercise_id, duration_minutes]
+    [userId, exercise_id, duration_minutes]
   );
 
-  res.json({ message: "Workout logged" });
-};
+  await db.query(
+    `INSERT INTO user_points (user_id, points)
+    VALUES ($1,10)
+    ON CONFLICT (user_id)
+    DO UPDATE SET points = user_points.points + 10`,
+    [userId]
+  );
 
-exports.getTodayCompletedExercises = async (req, res) => {
+  await db.query(
+    `UPDATE user_points
+    SET points = points + 10
+    WHERE user_id=$1`,
+    [userId]
+  );
 
-  try {
+  const today = new Date().toISOString().split("T")[0];
 
-    const result = await db.query(
-      `
-      SELECT exercise_id
-      FROM workout_logs
-      WHERE user_id = $1
-      AND exercise_id IS NOT NULL
-      AND (completed_at AT TIME ZONE 'America/New_York')::date = CURRENT_DATE
-      `,
-      [req.user.id]
+  const streakResult = await db.query(
+    `SELECT streak, last_workout_date
+     FROM user_streaks
+     WHERE user_id=$1`,
+    [userId]
+  );
+
+  let newStreak = 1;
+
+  if (streakResult.rows.length) {
+
+    const { streak, last_workout_date } = streakResult.rows[0];
+
+    const lastDate = last_workout_date
+      ? new Date(last_workout_date).toISOString().split("T")[0]
+      : null;
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+    if (lastDate === today) {
+      newStreak = streak;
+    }
+
+    else if (lastDate === yesterdayStr) {
+      newStreak = streak + 1;
+    }
+
+    else {
+      newStreak = 1;
+    }
+
+    await db.query(
+      `UPDATE user_streaks
+       SET streak=$1,
+           last_workout_date=$2
+       WHERE user_id=$3`,
+      [newStreak, today, userId]
     );
 
-    res.json(result.rows);
+  } else {
 
-  } catch (err) {
-
-    console.error("Completed exercises error:", err);
-
-    res.status(500).json({
-      error: "Failed to fetch completed exercises"
-    });
+    await db.query(
+      `INSERT INTO user_streaks (user_id, streak, last_workout_date)
+       VALUES ($1,1,$2)`,
+      [userId, today]
+    );
 
   }
 
+  res.json({
+    message: "Workout logged",
+    streak: newStreak
+  });
+
 };
+
 
 /*
 GET WORKOUT HISTORY + STREAKS
@@ -55,10 +100,10 @@ exports.getWorkoutHistory = async (req, res) => {
 
     const logs = await db.query(
       `SELECT wl.*, e.name
-   FROM workout_logs wl
-   LEFT JOIN exercises e ON e.id = wl.exercise_id
-   WHERE wl.user_id = $1
-   ORDER BY wl.completed_at DESC`,
+       FROM workout_logs wl
+       JOIN exercises e ON e.id = wl.exercise_id
+       WHERE wl.user_id=$1
+       ORDER BY wl.completed_at DESC`,
       [req.user.id]
     );
 
@@ -288,11 +333,8 @@ exports.getUserStats = async (req, res) => {
 
   } catch (err) {
 
-    console.error("Stats error:", err);
-
-    res.status(500).json({
-      error: "Failed to fetch user stats"
-    });
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch stats" });
 
   }
 
