@@ -1,0 +1,226 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import BackToDashboard from '../components/BackToDashboard';
+import WorkoutCard from '../components/WorkoutCard';
+import { toast } from 'sonner';
+import api, { getWorkout, submitWorkoutRating } from '../services/api';
+
+const Workout = () => {
+  const navigate = useNavigate();
+
+  const [workout, setWorkout] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [completedExercises, setCompletedExercises] = useState([]);
+  const [showRating, setShowRating] = useState(false);
+  const [currentDay, setCurrentDay] = useState(null);
+
+  useEffect(() => {
+    loadWorkout();
+    loadCompletedExercises();
+  }, []);
+
+  const loadWorkout = async () => {
+    try {
+      const response = await getWorkout();
+      setWorkout(response.data);
+    } catch (error) {
+      console.error('Failed to load workout:', error);
+      toast.error('Failed to load workout plan');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadCompletedExercises = async () => {
+    try {
+      const res = await api.get('/workouts/history');
+
+      const todayStr = new Date().toDateString();
+
+      const completedIds = res.data.logs
+        .filter(
+          log =>
+            log.exercise_id != null &&
+            new Date(log.completed_at).toDateString() === todayStr
+        )
+        .map(log => log.exercise_id);
+
+      setCompletedExercises(completedIds);
+    } catch (err) {
+      console.error('Failed to load completed exercises:', err);
+    }
+  };
+
+  const handleComplete = (exerciseId) => {
+    if (workout?.completedToday) {
+      toast.message(
+        "You already completed today's assigned workout. Extra workouts still earn points, but the next day starts tomorrow."
+      );
+      return;
+    }
+    const updatedCompleted = [...new Set([...completedExercises, exerciseId])];
+    setCompletedExercises(updatedCompleted);
+
+    if (!workout?.exercises) return;
+
+    const day = workout.exercises.find(d =>
+      d.exercises.some(ex => ex.id === exerciseId)
+    );
+
+    if (!day) return;
+
+    const completedCountForDay = day.exercises.filter(ex =>
+      updatedCompleted.includes(ex.id)
+    ).length;
+
+    if (completedCountForDay === day.exercises.length) {
+      setCurrentDay(day.day);
+      setShowRating(true);
+      toast.success(`Day ${day.day} completed!`);
+    } else {
+      toast.success('Exercise completed!');
+    }
+  };
+
+  const submitRating = async (rating) => {
+    try {
+      await submitWorkoutRating({
+        rating,
+        day: currentDay
+      });
+
+      await loadWorkout();
+
+      toast.success('Next workout unlocked 🔓');
+      navigate('/dashboard');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to submit rating');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your workout...</p>
+        </div>
+      </div>
+    );
+  }
+
+const unlockedDay = workout?.unlockedDay;
+const completedToday = workout?.completedToday;
+
+const today = !completedToday
+  ? workout?.exercises?.find(d => d.day === unlockedDay)
+  : null;
+
+const totalExercises = today?.exercises?.length || 0;
+
+const todayExerciseIds = today?.exercises?.map(ex => ex.id) || [];
+const completedTodayCount = completedExercises.filter(id =>
+  todayExerciseIds.includes(id)
+).length;
+
+const progressPercent =
+  totalExercises > 0
+    ? (completedTodayCount / totalExercises) * 100
+    : 0;
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      <BackToDashboard />
+
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">
+          Today's Workout
+        </h1>
+        <p className="text-gray-600">
+          {totalExercises} exercises • AI-personalized for you
+        </p>
+      </div>
+
+      {!completedToday && (
+        <div className="mt-8 bg-white rounded-xl shadow-md p-6">
+          <div className="flex justify-between mb-2">
+            <span className="font-semibold text-gray-800">Progress</span>
+            <span className="text-gray-600">
+              {completedTodayCount} / {totalExercises} completed
+            </span>
+          </div>
+
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div
+              className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {completedToday && (
+        <div className="mb-6 bg-white rounded-xl shadow-md p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-2">
+            Today's assigned workout is complete ✅
+          </h2>
+          <p className="text-gray-600">
+          You can still log extra workouts for points, but your next assigned day starts tomorrow.
+          </p>
+        </div>
+      )}
+
+      {today && (
+        <div className="mb-10">
+          <h2 className="text-xl font-bold text-gray-700 mb-4">
+            Day {today.day}
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {today.exercises.map((exercise) => (
+              <WorkoutCard
+                key={exercise.id}
+                exercise={exercise}
+                onComplete={handleComplete}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      
+
+      {showRating && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+          <div className="bg-white rounded-xl p-6 shadow-xl w-96 text-center">
+            <h2 className="text-xl font-bold mb-2">
+              Day {currentDay} Completed 🎉
+            </h2>
+
+            <p className="text-gray-600 mb-4">
+              How difficult was this workout?
+            </p>
+
+            <div className="flex justify-center gap-3 mb-4">
+              {[1, 2, 3, 4, 5].map((num) => (
+                <button
+                  key={num}
+                  onClick={() => submitRating(num)}
+                  className="w-10 h-10 rounded-full bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+
+            <p className="text-sm text-gray-500">
+              Your future workouts will adapt based on this feedback.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Workout;
