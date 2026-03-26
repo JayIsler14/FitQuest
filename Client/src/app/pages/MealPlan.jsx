@@ -15,6 +15,7 @@ const MealPlan = () => {
     try {
       const response = await getMealPlan();
       console.log('MEAL PLAN RESPONSE:', response.data);
+      console.log('FIRST DAY:', response.data?.days?.[0]);
       setMealPlan(response.data);
     } catch (error) {
       console.error('Failed to load meal plan:', error);
@@ -23,6 +24,9 @@ const MealPlan = () => {
     }
   };
 
+  const currentDay = mealPlan?.days?.[0] || null;
+  const meals = currentDay?.meals || [];
+
   const handleSwap = async (mealId, mealIndex) => {
     try {
       const res = await api.post('/meals/swap', { mealId });
@@ -30,16 +34,23 @@ const MealPlan = () => {
       if (!res.data) return;
 
       setMealPlan((prev) => {
-        if (!prev || !prev.meals) return prev;
+        if (!prev?.days?.length) return prev;
 
-        const updatedMeals = prev.meals.map((meal, index) => {
-          if (index !== mealIndex) return meal;
-          return res.data;
-        });
+        const updatedDays = [...prev.days];
+        const firstDay = updatedDays[0];
+
+        if (!firstDay?.meals) return prev;
+
+        updatedDays[0] = {
+          ...firstDay,
+          meals: firstDay.meals.map((meal, index) =>
+            index === mealIndex ? res.data : meal
+          )
+        };
 
         return {
           ...prev,
-          meals: updatedMeals
+          days: updatedDays
         };
       });
     } catch (err) {
@@ -57,8 +68,6 @@ const MealPlan = () => {
       </div>
     );
   }
-
-  const meals = mealPlan?.meals || [];
 
   const totalCalories = meals.reduce((sum, meal) => sum + Number(meal.calories || 0), 0);
   const totalProtein = meals.reduce((sum, meal) => sum + Number(meal.protein || 0), 0);
@@ -108,7 +117,7 @@ const MealPlan = () => {
             <MealCard
               key={meal.id || index}
               meal={meal}
-              mealType={['Breakfast', 'Lunch', 'Dinner'][index] || 'Meal'}
+              mealType={meal.meal_type || ['Breakfast', 'Lunch', 'Dinner'][index] || 'Meal'}
               onSwap={() => handleSwap(meal.id, index)}
             />
           ))}
