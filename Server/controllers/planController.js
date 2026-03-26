@@ -5,12 +5,23 @@ const { generateMealPlan } = require('../engines/nutritionEngine');
 
 exports.getWorkoutPlan = async (req, res) => {
   try {
-    const userId = req.user.id;
+
+    console.log("req.user:", req.user);
+    console.log("userId:", req.user?.id);
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: missing user id" });
+    }
 
     const user = await db.query(
       `SELECT unlocked_day FROM users WHERE id = $1`,
       [userId]
     );
+
+    if (!user.rows.length) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
     const unlockedDay = user.rows[0].unlocked_day || 1;
 
@@ -51,9 +62,9 @@ exports.getWorkoutPlan = async (req, res) => {
       );
     }
 
-    const filteredExercises = plan.exercises.filter(
-      d => d.day <= unlockedDay
-    );
+    const filteredExercises = Array.isArray(plan.exercises)
+      ? plan.exercises.filter(d => d.day <= unlockedDay)
+      : [];
 
     const today = new Date().toISOString().split("T")[0];
 
@@ -79,7 +90,7 @@ exports.getWorkoutPlan = async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("getWorkoutPlan error:", err);
     res.status(500).json({ message: "Workout plan generation failed" });
   }
 };
@@ -88,86 +99,95 @@ exports.getWorkoutPlan = async (req, res) => {
 
 exports.generateWorkoutPlanNow = async (req, res) => {
   try {
+    const userId = req.user?.id;
 
-    const userId = req.user.id;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: missing user id" });
+    }
 
     const profile = await db.query(
       `SELECT profile_change_version
        FROM user_profiles
-       WHERE user_id=$1`,
+       WHERE user_id = $1`,
       [userId]
     );
 
-    const version = profile.rows[0].profile_change_version;
+    if (!profile.rows.length) {
+      return res.status(400).json({ message: "Profile not found" });
+    }
 
+    const version = profile.rows[0].profile_change_version;
     const plan = await generateWorkoutPlan(userId);
 
     await db.query(
       `DELETE FROM generated_plans
-       WHERE user_id=$1
-       AND plan_type='workout'`,
+       WHERE user_id = $1
+       AND plan_type = 'workout'`,
       [userId]
     );
 
     await db.query(
       `INSERT INTO generated_plans
        (user_id, plan_type, content, profile_version)
-       VALUES ($1,'workout',$2,$3)`,
+       VALUES ($1, 'workout', $2, $3)`,
       [userId, plan, version]
     );
 
     res.json(plan);
 
   } catch (err) {
-    console.error(err);
+    console.error("generateWorkoutPlanNow error:", err);
     res.status(500).json({ message: "Plan regeneration failed" });
   }
 };
 
-
-
 exports.getMealPlan = async (req, res) => {
   try {
+    const userId = req.user?.id;
 
-    const userId = req.user.id;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: missing user id" });
+    }
 
     const profile = await db.query(
       `SELECT profile_change_version
        FROM user_profiles
-       WHERE user_id=$1`,
+       WHERE user_id = $1`,
       [userId]
     );
 
-    if (!profile.rows.length)
+    if (!profile.rows.length) {
       return res.status(400).json({ message: "Profile not found" });
+    }
 
     const version = profile.rows[0].profile_change_version;
 
     const existing = await db.query(
       `SELECT content
        FROM generated_plans
-       WHERE user_id=$1
-       AND plan_type='meal'
-       AND profile_version=$2`,
+       WHERE user_id = $1
+       AND plan_type = 'meal'
+       AND profile_version = $2`,
       [userId, version]
     );
 
-    if (existing.rows.length)
+    if (existing.rows.length) {
       return res.json(existing.rows[0].content);
+    }
 
     const plan = await generateMealPlan(userId);
 
     await db.query(
       `INSERT INTO generated_plans
        (user_id, plan_type, content, profile_version)
-       VALUES ($1,'meal',$2,$3)`,
+       VALUES ($1, 'meal', $2, $3)`,
       [userId, plan, version]
     );
 
     res.json(plan);
 
   } catch (err) {
-    console.error(err);
+    console.error("getMealPlan error:", err);
     res.status(500).json({ message: "Meal plan generation failed" });
   }
 };
