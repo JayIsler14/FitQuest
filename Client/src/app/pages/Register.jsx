@@ -75,7 +75,7 @@ const Register = () => {
         <div className="flex justify-center mb-6">
           <div className="flex items-center gap-2">
             <Dumbbell className="text-blue-600" size={32} />
-            <span className="font-bold text-2xl">AdaptiveFit AI</span>
+            <span className="font-bold text-2xl">FitQuest</span>
           </div>
         </div>
 

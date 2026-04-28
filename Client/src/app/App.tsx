@@ -1,14 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { useEffect } from "react";
-import { getCurrentUser } from "./services/api";
+import { getCurrentUser } from './services/api';
+
 // Auth Pages
 import Register from './pages/Register';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import Onboarding from './pages/Onboarding';
-import NewPassword from "./pages/NewPassword";
+import NewPassword from './pages/NewPassword';
 
 // App Pages
 import Dashboard from './pages/Dashboard';
@@ -23,15 +23,8 @@ import Settings from './pages/Settings';
 // Layout
 import Layout from './components/Layout';
 
-// SECURITY NOTES:
-// Never store raw passwords
-// Never expose password_hash
-// Validate JWT on protected routes
-// Never trust frontend input
-// All filtering must occur server-side
-
 // Protected Route Component
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+const ProtectedRoute = ({ children }) => {
   const isAuthenticated = localStorage.getItem('jwt_token');
 
   if (!isAuthenticated) {
@@ -42,25 +35,23 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
-
   useEffect(() => {
-
     const loadUser = async () => {
       try {
         const user = await getCurrentUser();
-        console.log("User session restored:", user);
+        console.log('User session restored:', user);
       } catch (err) {
-        console.log("User not logged in");
+        console.log('User not logged in');
       }
     };
 
     loadUser();
-
   }, []);
 
   return (
     <BrowserRouter>
       <Toaster position="top-right" richColors />
+
       <Routes>
         {/* Public Routes */}
         <Route path="/register" element={<Register />} />
@@ -68,9 +59,7 @@ function App() {
         <Route path="/reset-password/:token" element={<NewPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        <Route path="/profile/:id" element={<Profile />} />
-
-        {/* Onboarding (protected) */}
+        {/* Onboarding */}
         <Route
           path="/onboarding"
           element={
@@ -97,10 +86,11 @@ function App() {
           <Route path="food-log" element={<FoodLog />} />
           <Route path="social" element={<Social />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="profile/:id" element={<Profile />} />
           <Route path="settings" element={<Settings />} />
         </Route>
 
-        {/* Catch all - redirect to login */}
+        {/* Catch all */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

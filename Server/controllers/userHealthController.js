@@ -1,9 +1,9 @@
 const db = require('../config/db');
 
 
-// ==============================
+
 // USER INJURIES
-// ==============================
+
 
 exports.saveUserInjuries = async (req, res) => {
   const { injuries } = req.body;
@@ -52,9 +52,9 @@ exports.getUserInjuries = async (req, res) => {
 
 
 
-// ==============================
+
 // USER HEALTH CONDITIONS
-// ==============================
+
 
 exports.saveHealthConditions = async (req, res) => {
   const { conditions } = req.body;
@@ -103,9 +103,9 @@ exports.getUserHealthConditions = async (req, res) => {
 
 
 
-// ==============================
+
 // USER ALLERGIES
-// ==============================
+
 
 exports.saveAllergies = async (req, res) => {
   const { allergies } = req.body;
@@ -154,9 +154,9 @@ exports.getUserAllergies = async (req, res) => {
 
 
 
-// ==============================
+
 // USER DIETARY RESTRICTIONS
-// ==============================
+
 
 exports.saveDietaryRestrictions = async (req, res) => {
   const { restrictions } = req.body;

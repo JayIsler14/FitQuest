@@ -3,9 +3,7 @@ const jwt = require("jsonwebtoken");
 const db = require("../config/db");
 
 
-// ============================================
-// REGISTER
-// ============================================
+
 exports.register = async (req, res) => {
 
   try {
@@ -78,9 +76,9 @@ exports.register = async (req, res) => {
 
 
 
-// ============================================
+
 // LOGIN
-// ============================================
+
 exports.login = async (req, res) => {
 
   try {
@@ -150,9 +148,9 @@ exports.login = async (req, res) => {
 
 
 
-// ============================================
+
 // REFRESH TOKEN
-// ============================================
+
 exports.refreshToken = (req, res) => {
 
   const refreshToken = req.cookies.refreshToken;
@@ -181,9 +179,9 @@ exports.refreshToken = (req, res) => {
 
 
 
-// ============================================
+
 // LOGOUT
-// ============================================
+
 exports.logout = (req, res) => {
 
   res.clearCookie("refreshToken", {
@@ -198,9 +196,9 @@ exports.logout = (req, res) => {
 
 
 
-// ============================================
+
 // GET CURRENT USER
-// ============================================
+
 exports.getMe = async (req, res) => {
 
   try {

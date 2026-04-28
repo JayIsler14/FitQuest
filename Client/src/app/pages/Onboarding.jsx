@@ -5,10 +5,6 @@ import CheckboxList from '../components/CheckboxList';
 import {
   createUserProfile,
   updateUserProfile,
-  saveUserInjuries,
-  saveHealthConditions,
-  saveAllergies,
-  saveDietaryRestrictions,
   getInjuries,
   getHealthConditions,
   getAllergies,
@@ -18,14 +14,9 @@ import {
   getUserHealthConditions,
   getUserAllergies,
   getUserDietaryRestrictions,
+  generateFullPlan,
 } from '../services/api';
 import { toast } from 'sonner';
-
-// DATABASE-DRIVEN ONBOARDING
-// All lists (injuries, conditions, allergies, diet) come from database
-// Steps 3-6 use dynamic CheckboxList component
-// On submit: Increment profile_change_version to trigger AI plan regeneration
-// EDIT MODE: Supports ?edit=true query parameter to load and modify existing data
 
 const Onboarding = () => {
   const navigate = useNavigate();
@@ -36,7 +27,6 @@ const Onboarding = () => {
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(isEditMode);
 
-  // Form data
   const [basicInfo, setBasicInfo] = useState({
     age: '',
     height: '',
@@ -44,14 +34,12 @@ const Onboarding = () => {
     goal: 'maintain',
   });
 
-  // Validation errors for Step 1
   const [errors, setErrors] = useState({
     age: '',
     height: '',
     weight: '',
   });
 
-  // Touched fields (for showing errors only after blur)
   const [touched, setTouched] = useState({
     age: false,
     height: false,
@@ -64,13 +52,11 @@ const Onboarding = () => {
     weeklyAvailability: '3-4',
   });
 
-  // Dynamic data from database
   const [availableInjuries, setAvailableInjuries] = useState([]);
   const [availableConditions, setAvailableConditions] = useState([]);
   const [availableAllergies, setAvailableAllergies] = useState([]);
   const [availableRestrictions, setAvailableRestrictions] = useState([]);
 
-  // Selected IDs
   const [selectedInjuries, setSelectedInjuries] = useState([]);
   const [selectedConditions, setSelectedConditions] = useState([]);
   const [selectedAllergies, setSelectedAllergies] = useState([]);
@@ -78,105 +64,113 @@ const Onboarding = () => {
 
   const totalSteps = 6;
 
-  // Load dynamic data on mount
   useEffect(() => {
     loadDynamicData();
   }, []);
 
-  const loadDynamicData = async () => {
-    try {
-      // TODO: GET /injuries - Database: injuries table
-      const injuriesRes = await getInjuries();
-      setAvailableInjuries(injuriesRes.data);
-
-      // TODO: GET /health-conditions - Database: health_conditions table
-      const conditionsRes = await getHealthConditions();
-      setAvailableConditions(conditionsRes.data);
-
-      // TODO: GET /allergies - Database: allergies table
-      const allergiesRes = await getAllergies();
-      setAvailableAllergies(allergiesRes.data);
-
-      // TODO: GET /dietary-restrictions - Database: dietary_restrictions table
-      const restrictionsRes = await getDietaryRestrictions();
-      setAvailableRestrictions(restrictionsRes.data);
-    } catch (error) {
-      console.error('Failed to load onboarding data:', error);
-    }
-  };
-
-  // Load existing user data if in edit mode
   useEffect(() => {
     if (isEditMode) {
       loadUserData();
     }
   }, [isEditMode]);
 
+  const loadDynamicData = async () => {
+    try {
+      const injuriesRes = await getInjuries();
+      setAvailableInjuries(injuriesRes.data || []);
+
+      const conditionsRes = await getHealthConditions();
+      setAvailableConditions(conditionsRes.data || []);
+
+      const allergiesRes = await getAllergies();
+      setAvailableAllergies(allergiesRes.data || []);
+
+      const restrictionsRes = await getDietaryRestrictions();
+      setAvailableRestrictions(restrictionsRes.data || []);
+    } catch (error) {
+      console.error('Failed to load onboarding data:', error);
+      toast.error('Failed to load onboarding options.');
+    }
+  };
+
+  const normalizeSelectedIds = (items) =>
+    Array.isArray(items)
+      ? items
+          .map((item) =>
+            typeof item === 'object'
+              ? item?.id ??
+                item?.injury_id ??
+                item?.condition_id ??
+                item?.allergy_id ??
+                item?.restriction_id
+              : item
+          )
+          .filter((value) => value !== undefined && value !== null)
+      : [];
+
   const loadUserData = async () => {
     try {
-      // TODO: GET /api/user-profile
-      // Database: user_profiles table
-      // Load basic info and experience data
       const profileRes = await getUserProfile();
-      setBasicInfo(profileRes.data);
-      setExperience(profileRes.data);
+      const profileData = profileRes.data || {};
 
-      // TODO: GET /api/user-injuries
-      // Database: user_injuries table (many-to-many join)
-      // Returns array of injury objects with IDs
-      const injuriesRes = await getUserInjuries();
-      setSelectedInjuries(injuriesRes.data.map(injury => injury.id || injury));
+      setBasicInfo({
+        age: profileData.age ?? '',
+        height: profileData.height ?? '',
+        weight: profileData.weight ?? '',
+        goal: profileData.goal ?? 'maintain',
+      });
 
-      // TODO: GET /api/user-health-conditions
-      // Database: user_health_conditions table (many-to-many join)
-      // Returns array of condition objects with IDs
-      const conditionsRes = await getUserHealthConditions();
-      setSelectedConditions(conditionsRes.data.map(condition => condition.id || condition));
+      setExperience({
+        level: profileData.level ?? 3,
+        intensity: profileData.intensity ?? 3,
+        weeklyAvailability:
+          profileData.weeklyAvailability ??
+          profileData.weekly_availability ??
+          '3-4',
+      });
 
-      // TODO: GET /api/user-allergies
-      // Database: user_allergies table (many-to-many join)
-      // Returns array of allergy objects with IDs
-      const allergiesRes = await getUserAllergies();
-      setSelectedAllergies(allergiesRes.data.map(allergy => allergy.id || allergy));
+      const [injuriesRes, conditionsRes, allergiesRes, restrictionsRes] =
+        await Promise.all([
+          getUserInjuries(),
+          getUserHealthConditions(),
+          getUserAllergies(),
+          getUserDietaryRestrictions(),
+        ]);
 
-      // TODO: GET /api/user-dietary-restrictions
-      // Database: user_dietary_restrictions table (many-to-many join)
-      // Returns array of restriction objects with IDs
-      const restrictionsRes = await getUserDietaryRestrictions();
-      setSelectedRestrictions(restrictionsRes.data.map(restriction => restriction.id || restriction));
+      setSelectedInjuries(normalizeSelectedIds(injuriesRes.data));
+      setSelectedConditions(normalizeSelectedIds(conditionsRes.data));
+      setSelectedAllergies(normalizeSelectedIds(allergiesRes.data));
+      setSelectedRestrictions(normalizeSelectedIds(restrictionsRes.data));
     } catch (error) {
       console.error('Failed to load user data:', error);
+      toast.error('Failed to load saved preferences.');
     } finally {
       setDataLoading(false);
     }
   };
 
-  // Validation function for Step 1
   const validateField = (field, value) => {
-    const trimmedValue = value.toString().trim();
+    const trimmed = value?.toString().trim();
 
-    // Check if empty
-    if (!trimmedValue) {
-      return `${field.charAt(0).toUpperCase() + field.slice(1)} is required`;
+    if (!trimmed) {
+      return 'This field is required.';
     }
 
-    // Check if valid number
-    const num = parseFloat(trimmedValue);
+    const num = parseFloat(trimmed);
+
     if (isNaN(num)) {
-      return 'Please enter a valid number';
+      return 'Please enter a valid number.';
     }
 
-    // Field-specific validation with realistic ranges
     if (field === 'age') {
+      if (!Number.isInteger(num)) {
+        return 'Age must be a whole number.';
+      }
       if (num < 13) {
         return 'You must be at least 13 years old.';
       }
       if (num > 100) {
-        return 'Please enter a valid age.';
-      }
-      // Check if whole number
-      if (!Number.isInteger(num)) {
-        return 'Age must be a whole number.';
+        return 'Please enter a realistic age.';
       }
     }
 
@@ -201,7 +195,6 @@ const Onboarding = () => {
     return '';
   };
 
-  // Validate all fields for Step 1
   const validateStep1 = () => {
     const newErrors = {
       age: validateField('age', basicInfo.age),
@@ -210,12 +203,9 @@ const Onboarding = () => {
     };
 
     setErrors(newErrors);
-
-    // Return true if no errors
     return !newErrors.age && !newErrors.height && !newErrors.weight;
   };
 
-  // Check if Step 1 is valid (for disabling button)
   const isStepOneValid = () => {
     const ageValue = basicInfo.age.toString().trim();
     const heightValue = basicInfo.height.toString().trim();
@@ -229,23 +219,18 @@ const Onboarding = () => {
     const height = parseFloat(heightValue);
     const weight = parseFloat(weightValue);
 
-    // Check if all are valid numbers
     if (isNaN(age) || isNaN(height) || isNaN(weight)) {
       return false;
     }
 
-    // Check realistic ranges
-    // Age: 13-100, must be whole number
     if (age < 13 || age > 100 || !Number.isInteger(age)) {
       return false;
     }
 
-    // Height: 120-250 cm
     if (height < 120 || height > 250) {
       return false;
     }
 
-    // Weight: 35-300 kg
     if (weight < 35 || weight > 300) {
       return false;
     }
@@ -253,18 +238,15 @@ const Onboarding = () => {
     return true;
   };
 
-  // Handle field change with validation
   const handleFieldChange = (field, value) => {
     setBasicInfo({ ...basicInfo, [field]: value });
 
-    // Clear error when user starts typing
     if (touched[field]) {
       const error = validateField(field, value);
       setErrors({ ...errors, [field]: error });
     }
   };
 
-  // Handle field blur
   const handleFieldBlur = (field) => {
     setTouched({ ...touched, [field]: true });
     const error = validateField(field, basicInfo[field]);
@@ -272,13 +254,11 @@ const Onboarding = () => {
   };
 
   const handleNext = () => {
-    // Validate Step 1 before proceeding
     if (step === 1) {
-      // Mark all fields as touched to show errors
       setTouched({ age: true, height: true, weight: true });
 
       if (!validateStep1()) {
-        return; // Don't proceed if validation fails
+        return;
       }
     }
 
@@ -299,73 +279,39 @@ const Onboarding = () => {
     setLoading(true);
 
     try {
+      const payload = {
+        age: basicInfo.age === '' ? null : Number(basicInfo.age),
+        height: basicInfo.height === '' ? null : Number(basicInfo.height),
+        weight: basicInfo.weight === '' ? null : Number(basicInfo.weight),
+        goal: basicInfo.goal,
+        level: Number(experience.level),
+        intensity: Number(experience.intensity),
+        weeklyAvailability: experience.weeklyAvailability,
+        injuries: selectedInjuries,
+        allergies: selectedAllergies,
+        healthConditions: selectedConditions,
+        dietaryRestrictions: selectedRestrictions,
+      };
+
       if (isEditMode) {
-        // EDIT MODE: Update existing profile
-        // TODO: PUT /api/user-profile
-        // Database: user_profiles table
-        // Backend logic:
-        // - UPDATE user_profiles SET age = ?, height = ?, weight = ?, goal = ?, level = ?, intensity = ?, weekly_availability = ?, profile_change_version = profile_change_version + 1 WHERE user_id = ?
-        // - Increment profile_change_version to trigger AI plan regeneration
-        await updateUserProfile({
-           ...basicInfo, 
-           ...experience, 
-           injuries: selectedInjuries,
-          allergies: selectedAllergies,
-          healthConditions: selectedConditions,
-          dietaryRestrictions: selectedRestrictions
-          });
+        await updateUserProfile(payload);
 
-        // TODO: BEGIN TRANSACTION
-        // DELETE existing many-to-many relationships and recreate them
-
-        // TODO: DELETE FROM user_injuries WHERE user_id = ?
-        // TODO: INSERT INTO user_injuries (user_id, injury_id) VALUES (?, ?) for each selected injury
-        await saveUserInjuries(selectedInjuries);
-
-        // TODO: DELETE FROM user_health_conditions WHERE user_id = ?
-        // TODO: INSERT INTO user_health_conditions (user_id, condition_id) VALUES (?, ?) for each selected condition
-        await saveHealthConditions(selectedConditions);
-
-        // TODO: DELETE FROM user_allergies WHERE user_id = ?
-        // TODO: INSERT INTO user_allergies (user_id, allergy_id) VALUES (?, ?) for each selected allergy
-        await saveAllergies(selectedAllergies);
-
-        // TODO: DELETE FROM user_dietary_restrictions WHERE user_id = ?
-        // TODO: INSERT INTO user_dietary_restrictions (user_id, restriction_id) VALUES (?, ?) for each selected restriction
-        await saveDietaryRestrictions(selectedRestrictions);
-
-        // TODO: COMMIT TRANSACTION
-
-        // TODO: Trigger AI plan regeneration
-        // Backend should detect profile_change_version increment
-        // - Mark existing generated_plans as outdated
-        // - Queue workoutEngine.js and nutritionEngine.js for regeneration
-        // - Consider user's updated injuries, conditions, allergies, and dietary restrictions
+        try {
+          await generateFullPlan();
+        } catch (planError) {
+          console.warn(
+            'Plan pre-generation failed, plan will regenerate on next fetch:',
+            planError
+          );
+        }
 
         toast.success('Preferences updated successfully!');
       } else {
-        // NEW USER MODE: Create initial profile
-        // TODO: POST /api/user-profile
-        // Database: user_profiles
-        // Set profile_change_version = 1
-        await createUserProfile({ ...basicInfo, ...experience });
-
-        await createUserProfile({
-          ...basicInfo,
-          ...experience,
-          injuries: selectedInjuries,
-          allergies: selectedAllergies,
-          healthConditions: selectedConditions,
-          dietaryRestrictions: selectedRestrictions
-        });
-
-        // AI LOGIC IS SERVER-SIDE
-        // After profile creation, backend will:
-        // - Set profile_change_version = 1
-        // - Trigger workoutEngine.js and nutritionEngine.js
-        // - Generate initial plans in generated_plans table
+        await createUserProfile(payload);
       }
 
+      window.dispatchEvent(new Event('profile-updated'));
+      window.dispatchEvent(new Event('workout-plan-updated'));
       navigate('/dashboard');
     } catch (error) {
       console.error('Failed to save profile:', error);
@@ -375,29 +321,73 @@ const Onboarding = () => {
     }
   };
 
-  const renderStep = () => {
+  if (dataLoading) {
+    return (
+      <div className="h-screen bg-gray-50 overflow-hidden flex items-center justify-center px-4">
+        <div className="text-center">
+          <div className="w-14 h-14 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your preferences...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const stepTitle = (() => {
     switch (step) {
       case 1:
-        return (
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Basic Information</h2>
+        return 'Tell us about yourself';
+      case 2:
+        return 'Set your workout preferences';
+      case 3:
+        return 'Do you have any injuries?';
+      case 4:
+        return 'Any health conditions?';
+      case 5:
+        return 'Any allergies?';
+      case 6:
+        return 'Any dietary restrictions?';
+      default:
+        return 'Onboarding';
+    }
+  })();
 
-            {/* Age Field */}
+  const stepDescription = (() => {
+    switch (step) {
+      case 1:
+        return 'We will use this to personalize your workout and meal plans.';
+      case 2:
+        return 'Choose the workout style and schedule that fits you best.';
+      case 3:
+        return 'We will avoid exercises that could aggravate injuries you select.';
+      case 4:
+        return 'These help us keep your plan safer and more appropriate.';
+      case 5:
+        return 'We will use this when building your meal recommendations.';
+      case 6:
+        return 'We will tailor meals around the restrictions you choose.';
+      default:
+        return '';
+    }
+  })();
+
+  const renderStepContent = () => {
+    if (step === 1) {
+      return (
+        <div className="w-full max-w-none">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Age <span className="text-red-500">*</span>
+                Age
               </label>
               <input
                 type="number"
-                min="13"
-                max="100"
-                step="1"
                 value={basicInfo.age}
                 onChange={(e) => handleFieldChange('age', e.target.value)}
                 onBlur={() => handleFieldBlur('age')}
-                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${touched.age && errors.age ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                placeholder="Enter your age"
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  touched.age && errors.age ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="25"
               />
               {touched.age && errors.age ? (
                 <p className="mt-1 text-sm text-red-500">{errors.age}</p>
@@ -406,78 +396,71 @@ const Onboarding = () => {
               )}
             </div>
 
-            {/* Height and Weight Fields */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* Height Field */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Height (cm) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="120"
-                  max="250"
-                  step="0.1"
-                  value={basicInfo.height}
-                  onChange={(e) => handleFieldChange('height', e.target.value)}
-                  onBlur={() => handleFieldBlur('height')}
-                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${touched.height && errors.height ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  placeholder="170"
-                />
-                {touched.height && errors.height ? (
-                  <p className="mt-1 text-sm text-red-500">{errors.height}</p>
-                ) : (
-                  <p className="mt-1 text-sm text-gray-500">Required</p>
-                )}
-              </div>
-
-              {/* Weight Field */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Weight (kg) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="35"
-                  max="300"
-                  step="0.1"
-                  value={basicInfo.weight}
-                  onChange={(e) => handleFieldChange('weight', e.target.value)}
-                  onBlur={() => handleFieldBlur('weight')}
-                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${touched.weight && errors.weight ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  placeholder="70"
-                />
-                {touched.weight && errors.weight ? (
-                  <p className="mt-1 text-sm text-red-500">{errors.weight}</p>
-                ) : (
-                  <p className="mt-1 text-sm text-gray-500">Required</p>
-                )}
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Height (cm)
+              </label>
+              <input
+                type="number"
+                value={basicInfo.height}
+                onChange={(e) => handleFieldChange('height', e.target.value)}
+                onBlur={() => handleFieldBlur('height')}
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  touched.height && errors.height ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="175"
+              />
+              {touched.height && errors.height ? (
+                <p className="mt-1 text-sm text-red-500">{errors.height}</p>
+              ) : (
+                <p className="mt-1 text-sm text-gray-500">Required</p>
+              )}
             </div>
 
-            {/* Fitness Goal Field */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Fitness Goal</label>
-              <select
-                value={basicInfo.goal}
-                onChange={(e) => setBasicInfo({ ...basicInfo, goal: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="loss">Weight Loss</option>
-                <option value="maintain">Maintain Weight</option>
-                <option value="gain">Muscle Gain</option>
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Weight (kg)
+              </label>
+              <input
+                type="number"
+                value={basicInfo.weight}
+                onChange={(e) => handleFieldChange('weight', e.target.value)}
+                onBlur={() => handleFieldBlur('weight')}
+                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  touched.weight && errors.weight ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="70"
+              />
+              {touched.weight && errors.weight ? (
+                <p className="mt-1 text-sm text-red-500">{errors.weight}</p>
+              ) : (
+                <p className="mt-1 text-sm text-gray-500">Required</p>
+              )}
             </div>
           </div>
-        );
 
-      case 2:
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Experience Level</h2>
+          <div className="mt-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Fitness Goal
+            </label>
+            <select
+              value={basicInfo.goal}
+              onChange={(e) => setBasicInfo({ ...basicInfo, goal: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="loss">Weight Loss</option>
+              <option value="maintain">Maintain Weight</option>
+              <option value="gain">Muscle Gain</option>
+            </select>
+          </div>
+        </div>
+      );
+    }
 
+    if (step === 2) {
+      return (
+        <div className="w-full max-w-2xl">
+          <div className="space-y-8">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 Experience Level: {experience.level}
@@ -487,10 +470,15 @@ const Onboarding = () => {
                 min="1"
                 max="5"
                 value={experience.level}
-                onChange={(e) => setExperience({ ...experience, level: parseInt(e.target.value) })}
+                onChange={(e) =>
+                  setExperience({
+                    ...experience,
+                    level: parseInt(e.target.value, 10),
+                  })
+                }
                 className="w-full"
               />
-              <div className="flex justify-between text-xs text-gray-600 mt-1">
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
                 <span>Beginner</span>
                 <span>Expert</span>
               </div>
@@ -505,20 +493,32 @@ const Onboarding = () => {
                 min="1"
                 max="5"
                 value={experience.intensity}
-                onChange={(e) => setExperience({ ...experience, intensity: parseInt(e.target.value) })}
+                onChange={(e) =>
+                  setExperience({
+                    ...experience,
+                    intensity: parseInt(e.target.value, 10),
+                  })
+                }
                 className="w-full"
               />
-              <div className="flex justify-between text-xs text-gray-600 mt-1">
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
                 <span>Light</span>
                 <span>Intense</span>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Weekly Availability</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Weekly Availability
+              </label>
               <select
                 value={experience.weeklyAvailability}
-                onChange={(e) => setExperience({ ...experience, weeklyAvailability: e.target.value })}
+                onChange={(e) =>
+                  setExperience({
+                    ...experience,
+                    weeklyAvailability: e.target.value,
+                  })
+                }
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="1-2">1-2 days per week</option>
@@ -528,80 +528,75 @@ const Onboarding = () => {
               </select>
             </div>
           </div>
-        );
+        </div>
+      );
+    }
 
-      case 3:
-        return (
+    if (step === 3) {
+      return (
+        <div className="h-full min-h-0">
           <CheckboxList
             items={availableInjuries}
             selected={selectedInjuries}
             onChange={setSelectedInjuries}
-            title="Previous Injuries"
-            description="Select any injuries you've had (helps us create safer workouts)"
           />
-        );
+        </div>
+      );
+    }
 
-      case 4:
-        return (
+    if (step === 4) {
+      return (
+        <div className="h-full min-h-0">
           <CheckboxList
             items={availableConditions}
             selected={selectedConditions}
             onChange={setSelectedConditions}
-            title="Health Conditions"
-            description="Select any conditions that apply to you"
           />
-        );
+        </div>
+      );
+    }
 
-      case 5:
-        return (
+    if (step === 5) {
+      return (
+        <div className="h-full min-h-0">
           <CheckboxList
             items={availableAllergies}
             selected={selectedAllergies}
             onChange={setSelectedAllergies}
-            title="Food Allergies"
-            description="Select any allergies you have"
           />
-        );
-
-      case 6:
-        return (
-          <CheckboxList
-            items={availableRestrictions}
-            selected={selectedRestrictions}
-            onChange={setSelectedRestrictions}
-            title="Dietary Preferences"
-            description="Select your dietary preferences"
-          />
-        );
-
-      default:
-        return null;
+        </div>
+      );
     }
+
+    return (
+      <div className="h-full min-h-0">
+        <CheckboxList
+          items={availableRestrictions}
+          selected={selectedRestrictions}
+          onChange={setSelectedRestrictions}
+        />
+      </div>
+    );
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-2xl mx-auto py-8">\n        {/* Top section with Cancel button for edit mode */}
-        <div className="flex items-center justify-between mb-6">
-          {/* Back to Dashboard button */}
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition-colors group"
-          >
-            <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-            <span className="font-medium">Dashboard</span>
-          </button>
+  const isCheckboxStep = step >= 3;
 
-          {/* Cancel button (edit mode only) */}
-          {isEditMode && (
+  return (
+    <div className="h-screen bg-gray-50 overflow-hidden">
+      <div className="max-w-3xl mx-auto h-full px-4 pt-6 pb-4 flex flex-col">
+        <div className="mb-4 shrink-0">
+          {isEditMode ? (
             <button
-              onClick={() => {
-                // IMPORTANT:
-                // Only persist changes on final confirmation
-                // Cancel must discard all unsaved edits
-                navigate('/dashboard');
-              }}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              onClick={() => navigate('/profile')}
+              className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium"
+            >
+              <ArrowLeft size={18} />
+              Back to Profile
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate('/login')}
+              className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium"
             >
               <X size={18} />
               Cancel
@@ -609,73 +604,59 @@ const Onboarding = () => {
           )}
         </div>
 
-        {/* Edit Mode Indicator */}
-        {isEditMode && (
-          <div className="mb-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-semibold text-blue-900">Editing Your Preferences</h3>
-                    <span className="px-2 py-1 text-xs font-medium bg-blue-200 text-blue-800 rounded-full">
-                      Previously Saved Preferences Loaded
-                    </span>
-                  </div>
-                  <p className="text-sm text-blue-700">
-                    Changes will only be saved when you complete all steps.
-                  </p>
-                </div>
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden h-[640px] max-h-full flex flex-col">
+          <div className="px-6 pt-6 pb-4 border-b border-gray-100 shrink-0">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div>
+                <p className="text-sm text-blue-600 font-semibold mb-1">
+                  {isEditMode ? 'Edit Preferences' : 'Welcome to FitQuest'}
+                </p>
+                <h1 className="text-2xl font-bold text-gray-900">{stepTitle}</h1>
+                <p className="text-gray-600 mt-2">{stepDescription}</p>
+              </div>
+
+              <div className="text-sm text-gray-500 font-medium shrink-0">
+                Step {step} of {totalSteps}
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Progress bar */}
-        <div className="mb-8">
-          <div className="flex justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Step {step} of {totalSteps}</span>
-            <span className="text-sm text-gray-600">{Math.round((step / totalSteps) * 100)}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${(step / totalSteps) * 100}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Form card */}
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          {dataLoading ? (
-            <div className="flex justify-center items-center h-48">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-900" />
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(step / totalSteps) * 100}%` }}
+              />
             </div>
-          ) : (
-            renderStep()
-          )}
+          </div>
 
-          {/* Navigation buttons */}
-          <div className="flex gap-4 mt-8">
-            {step > 1 && (
-              <button
-                onClick={handleBack}
-                className="flex items-center gap-2 px-6 py-3 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
-              >
-                <ChevronLeft size={20} />
-                Back
-              </button>
+          <div className="flex-1 min-h-0">
+            {isCheckboxStep ? (
+              <div className="h-full min-h-0 p-6">
+                {renderStepContent()}
+              </div>
+            ) : (
+              <div className="h-full px-6 py-8 flex items-start justify-center">
+                {renderStepContent()}
+              </div>
             )}
+          </div>
+
+          <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between shrink-0">
+            <button
+              onClick={handleBack}
+              disabled={step === 1 || loading}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={18} />
+              Back
+            </button>
 
             <button
               onClick={handleNext}
-              disabled={loading || dataLoading || (step === 1 && !isStepOneValid())}
-              className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold transition-colors ${loading || dataLoading || (step === 1 && !isStepOneValid())
-                  ? 'opacity-50 cursor-not-allowed'
-                  : 'hover:bg-blue-700'
-                }`}
+              disabled={loading || (step === 1 && !isStepOneValid())}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed"
             >
-              {loading ? 'Saving...' : step === totalSteps ? (isEditMode ? 'Save Changes' : 'Complete') : 'Next'}
-              {!loading && step < totalSteps && <ChevronRight size={20} />}
+              {loading ? 'Saving...' : step === totalSteps ? 'Save Preferences' : 'Next'}
+              {!loading && <ChevronRight size={18} />}
             </button>
           </div>
         </div>

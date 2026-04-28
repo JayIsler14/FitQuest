@@ -1,189 +1,171 @@
 import axios from 'axios';
-import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../firebase";
-// TODO: Replace with actual backend URL
+
 const API_BASE_URL = 'http://localhost:8080/api';
 
-// Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
   },
-  withCredentials: true
+  withCredentials: true,
 });
 
-// Request interceptor to attach JWT token
-api.interceptors.request.use((config) => {
-
-  const token = localStorage.getItem("jwt_token");
+const withAuthHeader = (config) => {
+  const token = localStorage.getItem('jwt_token');
 
   if (token) {
+    config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
   }
 
   return config;
+};
 
-});
-
-// DEBUG LOGGER
-api.interceptors.request.use((req) => {
-  console.log("API REQUEST:", req.method?.toUpperCase(), req.url, req.data);
-  return req;
-});
-
-api.interceptors.response.use(
-  (res) => {
-    console.log("API RESPONSE:", res.status, res.config.url, res.data);
-    return res;
-  },
-  (err) => {
-    console.error("API ERROR:", err.response?.status, err.response?.data);
-    return Promise.reject(err);
-  }
-
-);
-api.interceptors.response.use(
-  (res) => {
-    console.log("API SUCCESS:", res.config.url, res.data);
-    return res;
-  },
-  (err) => {
-    console.error("API ERROR:", err.response?.data || err.message);
-    return Promise.reject(err);
-  }
-);
-// Request interceptor to attach JWT token
 api.interceptors.request.use((config) => {
-
-  const token = localStorage.getItem("jwt_token");
-
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  return config;
-
+  const nextConfig = withAuthHeader(config);
+  console.log('API REQUEST:', nextConfig.method?.toUpperCase(), nextConfig.url, nextConfig.data);
+  return nextConfig;
 });
 
-// Response interceptor for error handling
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('API RESPONSE:', response.status, response.config.url, response.data);
+    return response;
+  },
   async (error) => {
+    console.error('API ERROR:', error.response?.status, error.response?.data || error.message);
 
     const originalRequest = error.config || {};
 
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url.includes("/auth/refresh")
+      !originalRequest.url?.includes('/auth/refresh')
     ) {
-
       originalRequest._retry = true;
 
       try {
+        const refreshResponse = await api.post('/auth/refresh');
+        const newToken = refreshResponse.data.accessToken;
 
-        const res = await api.post("/auth/refresh");
-
-        const newToken = res.data.accessToken;
-
-        localStorage.setItem("jwt_token", newToken);
-
+        localStorage.setItem('jwt_token', newToken);
+        originalRequest.headers = originalRequest.headers || {};
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
 
         return api(originalRequest);
+      } catch (refreshError) {
+        localStorage.removeItem('jwt_token');
 
-      } catch (err) {
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
 
-        localStorage.removeItem("jwt_token");
-
-        window.location.href = "/login";
-
+        return Promise.reject(refreshError);
       }
     }
 
     return Promise.reject(error);
-
   }
 );
-export const logout = async () => {
 
-  await api.post("/auth/logout");
+const requestWithFallback = async (requests) => {
+  let lastError;
 
-  localStorage.removeItem("jwt_token");
+  for (const requestFactory of requests) {
+    try {
+      return await requestFactory();
+    } catch (error) {
+      lastError = error;
 
-  if (window.location.pathname !== "/login") {
-    window.location.href = "/login";
+      const status = error?.response?.status;
+
+      if (status && status !== 404 && status !== 405) {
+        throw error;
+      }
+    }
   }
 
+  throw lastError;
 };
-export const getCurrentUser = async () => {
 
-  const token = localStorage.getItem("jwt_token");
+const healthRouteFallbacks = {
+  injuries: ['/userHealth/user-injuries', '/user-injuries'],
+  healthConditions: ['/userHealth/user-health-conditions', '/user-health-conditions'],
+  allergies: ['/userHealth/user-allergies', '/user-allergies'],
+  dietaryRestrictions: ['/userHealth/user-dietary-restrictions', '/user-dietary-restrictions'],
+};
+
+const getManyToManySelections = async (key) => {
+  const [primary, fallback] = healthRouteFallbacks[key];
+
+  return requestWithFallback([
+    () => api.get(primary),
+    () => api.get(fallback),
+  ]);
+};
+
+const saveManyToManySelections = async (key, bodyKey, values) => {
+  const [primary, fallback] = healthRouteFallbacks[key];
+  const payload = { [bodyKey]: values };
+
+  return requestWithFallback([
+    () => api.post(primary, payload),
+    () => api.post(fallback, payload),
+  ]);
+};
+
+export const logout = async () => {
+  await api.post('/auth/logout');
+  localStorage.removeItem('jwt_token');
+
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login';
+  }
+};
+
+export const getCurrentUser = async () => {
+  const token = localStorage.getItem('jwt_token');
 
   if (!token) return null;
 
-  const res = await api.get("/auth/me");
-
+  const res = await api.get('/auth/me');
   return res.data;
-
 };
-// ============================================
-// AUTHENTICATION ENDPOINTS
-// ============================================
 
-// TODO: POST /register
-// Backend:
-// - Hash password using bcrypt
-// - Store in users table (Neon PostgreSQL)
-// - Never expose password_hash
+
+// AUTHENTICATION ENDPOINTS
+
+
 export const register = async (userData) => {
   const response = await api.post('/auth/register', userData);
-
   const { accessToken } = response.data;
 
   if (accessToken) {
-    localStorage.setItem("jwt_token", accessToken);
+    localStorage.setItem('jwt_token', accessToken);
   }
 
   return response;
 };
 
-// TODO: POST /login
-// Backend:
-// - Verify password with bcrypt.compare()
-// - Generate JWT with user id and expiry
-// - Return JWT token
 export const login = async (identifier, password) => {
-
-  const res = await api.post("/auth/login", {
-    identifier,
-    password
-  });
-
-  localStorage.setItem("jwt_token", res.data.accessToken);
-
+  const res = await api.post('/auth/login', { identifier, password });
+  localStorage.setItem('jwt_token', res.data.accessToken);
   return res.data;
-
 };
 
-// TODO: Firebase integration
-// sendPasswordResetEmail(auth, email)
-// Firebase handles secure token + email delivery
-// Backend JWT authentication remains separate
 export const requestPasswordReset = async (email) => {
-  return api.post("/auth/forgot-password", { email });
+  return api.post('/auth/forgot-password', { email });
 };
+
 export const resetPasswordWithToken = (token, password) => {
   return api.post(`/auth/reset-password/${token}`, { password });
 };
-// ============================================
-// USER PROFILE ENDPOINTS
-// ============================================
 
-// TODO: POST /user-profile
-// Database: user_profiles
-// Increment profile_change_version on update
+
+// USER PROFILE ENDPOINTS
+
+
 export const createUserProfile = async (profileData) => {
   return api.post('/onboarding', profileData);
 };
@@ -195,9 +177,10 @@ export const updateUserProfile = async (profileData) => {
 export const getUserProfile = async () => {
   return api.get('/onboarding');
 };
-// ============================================
+
+
 // INJURIES, HEALTH, ALLERGIES, DIET ENDPOINTS
-// ============================================
+
 
 export const getInjuries = async () => {
   return api.get('/health/injuries');
@@ -215,138 +198,111 @@ export const getDietaryRestrictions = async () => {
   return api.get('/health/dietary-restrictions');
 };
 
-// TODO: Save to user_injuries table (many-to-many relationship)
 export const saveUserInjuries = async (injuries) => {
-  return api.post('/user-injuries', { injuries });
+  return saveManyToManySelections('injuries', 'injuries', injuries);
 };
 
-// TODO: Save to user_health_conditions table
 export const saveHealthConditions = async (conditions) => {
-  return api.post('/user-health-conditions', { conditions });
+  return saveManyToManySelections('healthConditions', 'conditions', conditions);
 };
 
-// TODO: Save to user_allergies table
 export const saveAllergies = async (allergies) => {
-  return api.post('/user-allergies', { allergies });
+  return saveManyToManySelections('allergies', 'allergies', allergies);
 };
 
-// TODO: Save to user_dietary_restrictions table
 export const saveDietaryRestrictions = async (restrictions) => {
-  return api.post('/user-dietary-restrictions', { restrictions });
+  return saveManyToManySelections('dietaryRestrictions', 'restrictions', restrictions);
 };
 
-// ============================================
-// GET USER'S EXISTING SELECTIONS (FOR EDIT MODE)
-// ============================================
-
-// TODO: GET /user-injuries
-// Database: user_injuries table
-// Returns array of injury IDs for current user
 export const getUserInjuries = async () => {
-  return api.get('/user-injuries');
+  return getManyToManySelections('injuries');
 };
 
-// TODO: GET /user-health-conditions
-// Database: user_health_conditions table
-// Returns array of condition IDs for current user
 export const getUserHealthConditions = async () => {
-  return api.get('/user-health-conditions');
+  return getManyToManySelections('healthConditions');
 };
 
-// TODO: GET /user-allergies
-// Database: user_allergies table
-// Returns array of allergy IDs for current user
 export const getUserAllergies = async () => {
-  return api.get('/user-allergies');
+  return getManyToManySelections('allergies');
 };
 
-// TODO: GET /user-dietary-restrictions
-// Database: user_dietary_restrictions table
-// Returns array of restriction IDs for current user
 export const getUserDietaryRestrictions = async () => {
-  return api.get('/user-dietary-restrictions');
+  return getManyToManySelections('dietaryRestrictions');
 };
 
-// ============================================
-// WORKOUT PLAN ENDPOINTS
-// ============================================
 
-// TODO: GET /generateFullPlan
-// Backend:
-// - Check profile_change_version
-// - Regenerate plans if outdated
-// AI runs in:
-// - workoutEngine.js
-// - mealEngine.js
-// Plans stored in generated_plans table
+// WORKOUT PLAN ENDPOINTS
+
+
 export const generateFullPlan = async () => {
   return api.get('/plans/generate');
 };
 
-// TODO: GET /workout
-// AI Server-Side:
-// - safetyFilter.js
-// - difficultyEngine.js
-// Uses:
-// - exercises table
-// - exercise_contraindications table
 export const getWorkout = async () => {
   return api.get('/plans/workout');
 };
 
-// TODO: POST /workout/complete
-// Save to workout_logs
-// Update user_streaks
-// Update user_points
-// Update AI feedback modifier
 export const completeWorkout = async (workoutData) => {
   return api.post('/workouts/log', workoutData);
 };
 
-// TODO: GET /workout/history
-// Database:
-// - workout_logs
-// - user_streaks
 export const getWorkoutHistory = async () => {
   return api.get('/workouts/history');
 };
+
 export const getWeeklyActivity = () => {
   return api.get('/workouts/weekly-activity');
 };
+
 export const submitWorkoutRating = ({ rating, day }) =>
   api.post('/workouts/workout-rating', { rating, day });
-// ============================================
-// MEAL PLAN ENDPOINTS
-// ============================================
 
-// TODO: GET /meal-plan
-// Backend AI:
-// - Remove allergens
-// - Filter dietary compatibility
-// - Calculate BMR using Mifflin-St Jeor
-// - Adjust by goal
-// Uses meals table
+export const getBonusWorkoutPack = () => api.get('/workouts/bonus-pack');
+
+export const swapWorkoutExercise = async ({
+  currentExerciseId,
+  excludeExerciseIds,
+  workoutDay,
+  slotIndex
+}) => {
+  return api.post('/workouts/swap', {
+    currentExerciseId,
+    excludeExerciseIds,
+    workoutDay,
+    slotIndex
+  });
+};
+
+export const swapBonusWorkoutExercise = async ({
+  currentExerciseId,
+  excludeExerciseIds
+}) => {
+  return api.post('/workouts/bonus-pack/swap', {
+    currentExerciseId,
+    excludeExerciseIds
+  });
+};
+
+
+// MEAL PLAN ENDPOINTS
+
+
 export const getMealPlan = async () => {
   return api.get('/plans/meal');
 };
 
-// ============================================
-// FOOD LOG ENDPOINTS
-// ============================================
 
-// TODO: GET /foods
-// Search foods from foods table
+// FOOD LOG ENDPOINTS
+
+
 export const searchFoods = async (query) => {
   return api.get(`/foods?search=${query}`);
 };
 
-// TODO: POST /food_logs
-// Tables: food_logs
 export const logFood = async (mealData) => {
   return api.post('/meals/log', mealData);
 };
 
-// TODO: GET /food_logs
 export const getFoodLogs = async () => {
   return api.get('/meals/history');
 };
@@ -370,35 +326,42 @@ export const likePost = async (postId) => {
 export const getMealHistory = async () => {
   return api.get('/meals/history');
 };
-// ============================================
-// SOCIAL ENDPOINTS
-// ============================================
 
-// TODO: GET /public-users
-// Filter users where is_public = true
+
+// SOCIAL ENDPOINTS
+
+
 export const getPublicUsers = async () => {
   return api.get('/public-users');
 };
 
-// TODO: POST /post_likes
-/* export const likePost = async (userId) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ data: { success: true } });
-    }, 300);
-  });
+export const followUser = async (userId) => {
+  return api.post(`/social/follow/${userId}`);
 };
-*/
-// ============================================
+
+export const unfollowUser = async (userId) => {
+  return api.delete(`/social/follow/${userId}`);
+};
+
+export const getFollowStatus = async (userId) => {
+  return api.get(`/social/follow-status/${userId}`);
+};
+
+export const getFollowers = async () => {
+  return api.get('/social/followers');
+};
+
+export const getFollowing = async () => {
+  return api.get('/social/following');
+};
+
+
 // STATS ENDPOINTS
-// ============================================
+
 
 export const getUserStats = async () => {
-
-  const res = await api.get("/workouts/stats");
-
+  const res = await api.get('/workouts/stats');
   return res;
-
 };
 
 export const getUserProgress = async (userId) => {

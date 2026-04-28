@@ -17,27 +17,25 @@ const Layout = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
+    <div className="app-shell">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Navbar */}
+      <div className="app-main">
         <Navbar onMenuClick={() => setSidebarOpen(true)} />
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-auto pb-16 lg:pb-0">
-          <Outlet />
+        <main className="page-shell">
+          <div className="page-content">
+            <Outlet />
+          </div>
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t z-40 safe-bottom">
         <div className="flex justify-around py-2">
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
+
             return (
               <button
                 key={item.path}
